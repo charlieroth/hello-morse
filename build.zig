@@ -1,35 +1,24 @@
 const std = @import("std");
+const MicroZig = @import("microzig/build");
+const rp2040 = @import("microzig/bsp/raspberrypi/rp2040");
 
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
+    const mz = MicroZig.init(b, .{});
     const optimize = b.standardOptimizeOption(.{});
 
-    const exe = b.addExecutable(.{
-        .name = "hello-morse",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // Works like addExecutable, but takes a `microzig.Target`
+    // for target instead of a `std.zig.CrossTarget`
+    //
+    // Target conveys all necessary information on the chip,
+    // cpu and potentially the board as well
+    const firmware = mz.add_firmware(b, .{ .name = "hello-morse", .target = rp2040.boards.raspberrypi.pico, .optimize = optimize, .root_source_file = b.path("src/main.zig") });
 
-    b.installArtifact(exe);
+    // `install_firmware()` is a MicroZig pendant to `Build.installArtifact()`
+    // and allows installing the firmware as a typical firmware file.
+    //
+    // Will also install to `$prefix/firmware` instead of `$prefix/bin`
+    mz.install_firmware(b, firmware, .{});
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
-    const exe_unit_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
-
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_exe_unit_tests.step);
+    // For debugging, will also install the firmware as an ELF file
+    mz.install_firmware(b, firmware, .{ .format = .elf });
 }
